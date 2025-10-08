@@ -8,3 +8,5 @@
  * Debugger PIN: 818-032-705
  * Detected change in '/Users/user2/autods_fresh/app.py', reloading
  * Restarting with stat
+127.0.0.1 - - [08/Oct/2025 14:33:04] "GET /api/products HTTP/1.1" 200 -
+127.0.0.1 - - [08/Oct/2025 14:33:04] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
