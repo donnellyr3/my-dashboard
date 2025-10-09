@@ -1,18 +1,11 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request
 
 app = Flask(__name__)
 
-products = []
-logs = []
+VERIFICATION_TOKEN = "obSdraqjX9Y8gChpMnbymcxsm3coqckG"  # 👈 hardcoded token
 
-@app.route("/api/products", methods=["GET"])
-def get_products():
-    return jsonify(products)
-
-@app.route("/api/products", methods=["POST"])
-def add_product():
-    data = request.json
-    products.append(data)
-    logs.append(f"Added product: {data.get('name')}")
-    return jsonify({"message": "Product added"}), 201
+@app.route("/ebay/verify", methods=["GET"])
+def verify_ebay():
+    challenge_code = request.args.get("challenge_code")
+    return VERIFICATION_TOKEN, 200
 
