@@ -1,51 +1,34 @@
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-# ✅ This is your unique eBay verification token
-VERIFICATION_TOKEN = "b4e29a1fd9c2461d8f3a2c7e8a90b123456789ab"
+# ✅ Simple in-memory storage (you can switch to a DB later)
+products = []
+logs = []
 
-# -------------------------------
-# Health Check / Root Route
-# -------------------------------
+# 🏠 Home route
 @app.route("/")
 def home():
-    return jsonify({"message": "Dashboard API is running"}), 200
+    return {"message": "Dashboard API is running"}, 200
 
-# -------------------------------
-# eBay Verification Endpoint
-# -------------------------------
-@app.route("/ebay/verify", methods=["GET"])
-def verify_ebay():
-    """
-    eBay will call this with a 'challenge_code' query parameter.
-    You must return your verification token for eBay to approve the webhook.
-    """
-    challenge_code = request.args.get("challenge_code")
-    if challenge_code:
-        return VERIFICATION_TOKEN, 200
-    return "Missing challenge_code", 400
-
-# -------------------------------
-# Example API: Products
-# -------------------------------
-products = []
-
+# 📦 Products — Get all products
 @app.route("/api/products", methods=["GET"])
 def get_products():
-    return jsonify(products), 200
+    return jsonify(products)
 
+# 📦 Products — Add product
 @app.route("/api/products", methods=["POST"])
 def add_product():
     data = request.json
     products.append(data)
+    logs.append(f"Added product: {data.get('name')}")
     return jsonify({"message": "Product added"}), 201
 
-# -------------------------------
-# Run the app (for local testing)
-# -------------------------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+# 📜 Logs — View simple logs
+@app.route("/api/logs", methods=["GET"])
+def get_logs():
+    return jsonify(logs)
+
+# 🧠 eBay verification endpoint (for Marketplace Account
 
