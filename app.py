@@ -1,46 +1,41 @@
-import os
-import hashlib
+kimport os
 import json
+import hashlib
 import logging
 import requests
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
 
-# Initialize Flask app
+# -----------------------------------------------------
+# INITIALIZE APP + ENV
+# -----------------------------------------------------
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
-
-# Load environment variables
 load_dotenv()
 
-# eBay verification token and endpoint (used for marketplace account deletion)
-VERIFICATION_TOKEN = os.getenv("EBAY_VERIFICATION_TOKEN", "b4e29a1fd9c2461d8f3a2c7e8a90b123456789ab")
-ENDPOINT = "https://my-dashboard-tqtg.onrender.com/ebay/verify"
-
-# eBay OAuth credentials
-EBAY_CLIENT_ID = os.getenv("EBAY_CLIENT_ID", "RyanDonn-MyDashbo-PRD-3c5a9178a-2b23401c")
+# -----------------------------------------------------
+# ENV VARIABLES
+# -----------------------------------------------------
+EBAY_CLIENT_ID = "RyanDonn-MyDashbo-PRD-3c5a9178a-2b23401c"
 EBAY_CLIENT_SECRET = os.getenv("EBAY_CLIENT_SECRET")
 EBAY_ACCESS_TOKEN = os.getenv("EBAY_ACCESS_TOKEN")
 EBAY_REFRESH_TOKEN = os.getenv("EBAY_REFRESH_TOKEN")
 
-# Track access token expiry
-access_token_expiry = datetime.now() + timedelta(hours=2)
-
-# -----------------------------------------------------------
-# HOME ROUTE (OAuth redirect & health check)
-# -----------------------------------------------------------
+# -----------------------------------------------------
+# SIMPLE HOME PAGE
+# -----------------------------------------------------
 @app.route("/", methods=["GET"])
 def home():
     if "code" in request.args:
         code = request.args.get("code")
-        return f"✅ SUCCESS! Copy this entire URL including the code parameter and paste it into ChatGPT:\n\n{request.url}"
+        return f"✅ SUCCESS! Copy this entire URL and paste it into ChatGPT:\n\n{request.url}"
     return jsonify({"message": "Dashboard API is running"})
 
 
-# -----------------------------------------------------------
-# EBAY VERIFICATION ENDPOINT (MARKETPLACE ACCOUNT DELETION)
-# -----------------------------------------------------------
+# -----------------------------------------------------
+# EBAY WEBHOOK VERIFICATION
+# -----------------------------------------------------
 @app.route("/ebay/verify", methods=["GET", "POST"])
 def ebay_verify():
     if request.method == "GET":
@@ -48,7 +43,8 @@ def ebay_verify():
         if not challenge_code:
             return jsonify({"error": "Missing challenge_code"}), 400
 
-        # Calculate SHA-256 challenge response
+        VERIFICATION_TOKEN = "b4e29a1fd9c2461d8f3a2c7e8a90b123456789ab"
+        ENDPOINT = "https://my-dashboard-tqtg.onrender.com/ebay/verify"
         m = hashlib.sha256()
         m.update((challenge_code + VERIFICATION_TOKEN + ENDPOINT).encode("utf-8"))
         challenge_response = m.hexdigest()
@@ -66,23 +62,26 @@ def ebay_verify():
         return "", 200
 
 
-# -----------------------------------------------------------
-# TOKEN REFRESH HANDLER
-# -----------------------------------------------------------
-def refresh_access_token():
-    global EBAY_ACCESS_TOKEN, access_token_expiry
-    app.logger.info("Refreshing eBay Access Token...")
+# -----------------------------------------------------
+# TOKEN REFRESH
+# -----------------------------------------------------
+access_token_expiry = datetime.now() + timedelta(hours=2)
 
+def refresh_access_token():
+    """Automatically refresh eBay access token"""
+    global EBAY_ACCESS_TOKEN, access_token_expiry
+    app.logger.info("🔄 Refreshing eBay Access Token...")
     url = "https://api.ebay.com/identity/v1/oauth2/token"
     data = {
         "grant_type": "refresh_token",
         "refresh_token": EBAY_REFRESH_TOKEN,
-        "scope": "https://api.ebay.com/oauth/api_scope "
-                 "https://api.ebay.com/oauth/api_scope/sell.inventory "
-                 "https://api.ebay.com/oauth/api_scope/sell.account "
-                 "https://api.ebay.com/oauth/api_scope/sell.fulfillment"
+        "scope": (
+            "https://api.ebay.com/oauth/api_scope "
+            "https://api.ebay.com/oauth/api_scope/sell.account "
+            "https://api.ebay.com/oauth/api_scope/sell.inventory "
+            "https://api.ebay.com/oauth/api_scope/sell.fulfillment"
+        )
     }
-
     try:
         response = requests.post(
             url,
@@ -107,49 +106,57 @@ def ensure_token_valid():
         refresh_access_token()
 
 
-# -----------------------------------------------------------
-# SAMPLE ROUTES (ORDERS / PRODUCTS)
-# -----------------------------------------------------------
+# -----------------------------------------------------
+# EBAY CONNECTION TEST
+# -----------------------------------------------------
+@app.route("/api/ebay/test", methods=["GET"])
+def test_ebay_connection():
+    """Check if eBay API + token work"""
+    ensure_token_valid()
+    headers = {
+        "Authorization": f"Bearer {EBAY_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    url = "https://apiz.ebay.com/sell/account/v1/fulfillment-policy"
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return jsonify({"status": "success", "message": "✅ eBay API connection working!"})
+    else:
+        return jsonify({
+            "status": "error",
+            "code": response.status_code,
+            "response": response.text
+        }), response.status_code
+
+
+# -----------------------------------------------------
+# BASIC DATA ROUTES
+# -----------------------------------------------------
 orders = []
 products = []
-
 
 @app.route("/api/orders", methods=["GET", "POST"])
 def handle_orders():
     if request.method == "POST":
-        data = request.json
-        orders.append(data)
-        return jsonify({"message": "Order added successfully", "order": data})
+        new_order = request.json
+        orders.append(new_order)
+        return jsonify({"status": "Order added", "data": new_order})
     return jsonify(orders)
 
 
 @app.route("/api/products", methods=["GET", "POST"])
 def handle_products():
     if request.method == "POST":
-        data = request.json
-        products.append(data)
-        return jsonify({"message": "Product added successfully", "product": data})
+        new_product = request.json
+        products.append(new_product)
+        return jsonify({"status": "Product added", "data": new_product})
     return jsonify(products)
 
 
-# -----------------------------------------------------------
-# EBAY TEST ROUTE - Get Fulfillment Policies
-# -----------------------------------------------------------
-@app.route("/api/ebay/fulfillment-policies")
-def get_fulfillment_policies():
-    ensure_token_valid()
-    url = "https://api.ebay.com/sell/account/v1/fulfillment-policy"
-    headers = {
-        "Authorization": f"Bearer {EBAY_ACCESS_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    response = requests.get(url, headers=headers)
-    return jsonify(response.json()), response.status_code
-
-
-# -----------------------------------------------------------
-# MAIN ENTRY POINT
-# -----------------------------------------------------------
+# -----------------------------------------------------
+# RUN SERVER
+# -----------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
