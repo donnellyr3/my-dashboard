@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
-# Load .env variables
+# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
@@ -84,11 +84,36 @@ def refresh_access_token():
 def test_ebay_connection():
     headers = {"Authorization": f"Bearer {EBAY_ACCESS_TOKEN}"}
     response = requests.get("https://api.ebay.com/sell/account/v1/fulfillment-policy", headers=headers)
-    return jsonify({"status": response.status_code, "response": response.json()})
+    return jsonify({"status": response.status_code, "response": response.json()}), response.status_code
 
-# -----------------------------
-# MAIN ENTRY
-# -----------------------------
+
+# -----------------------------------------------------
+# BASIC DATA ROUTES
+# -----------------------------------------------------
+orders = []
+products = []
+
+@app.route("/api/orders", methods=["GET", "POST"])
+def handle_orders():
+    if request.method == "POST":
+        new_order = request.json
+        orders.append(new_order)
+        return jsonify({"status": "Order added", "data": new_order})
+    return jsonify(orders)
+
+
+@app.route("/api/products", methods=["GET", "POST"])
+def handle_products():
+    if request.method == "POST":
+        new_product = request.json
+        products.append(new_product)
+        return jsonify({"status": "Product added", "data": new_product})
+    return jsonify(products)
+
+
+# -----------------------------------------------------
+# RUN SERVER
+# -----------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
