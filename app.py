@@ -17,7 +17,7 @@ EBAY_ACCESS_TOKEN = os.getenv("EBAY_ACCESS_TOKEN")
 EBAY_REFRESH_TOKEN = os.getenv("EBAY_REFRESH_TOKEN")
 
 # -----------------------------------------------------
-# BASIC ROUTES
+# HOME ROUTE
 # -----------------------------------------------------
 @app.route("/")
 def home():
@@ -47,28 +47,37 @@ def refresh_ebay_token():
         return jsonify({"status": "error", "response": response.json()}), response.status_code
 
 # -----------------------------------------------------
-# EBAY TEST ROUTE (CONNECTIVITY)
+# EBAY CONNECTION TEST
 # -----------------------------------------------------
 @app.route("/api/ebay/test")
 def test_ebay_connection():
-    """Test connection to eBay API (Marketplace Insights)."""
+    """
+    Check eBay API connection using a universal endpoint.
+    """
     headers = {"Authorization": f"Bearer {EBAY_ACCESS_TOKEN}"}
-    url = "https://api.ebay.com/sell/marketplace_insights/v1/item_sales/search?q=iphone"
+    url = "https://api.ebay.com/sell/marketing/v1/ad_campaign"  # Always returns a response, even if no campaigns exist
 
     response = requests.get(url, headers=headers)
     try:
-        return jsonify({"status": response.status_code, "response": response.json()})
+        return jsonify({
+            "status": response.status_code,
+            "response": response.json()
+        })
     except Exception:
-        return jsonify({"status": response.status_code, "response": response.text})
+        return jsonify({
+            "status": response.status_code,
+            "response": response.text
+        })
 
 # -----------------------------------------------------
-# BASIC DATA ROUTES
+# BASIC DATA ROUTES (mock placeholders for AutoDS logic)
 # -----------------------------------------------------
 orders = []
 products = []
 
 @app.route("/api/orders", methods=["GET", "POST"])
 def handle_orders():
+    """Manage test orders."""
     if request.method == "POST":
         new_order = request.json
         orders.append(new_order)
@@ -77,6 +86,7 @@ def handle_orders():
 
 @app.route("/api/products", methods=["GET", "POST"])
 def handle_products():
+    """Manage test products."""
     if request.method == "POST":
         new_product = request.json
         products.append(new_product)
