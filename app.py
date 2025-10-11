@@ -4,6 +4,8 @@ import random
 from datetime import datetime
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import requests
+from bs4 import BeautifulSoup
 
 # --------------------------------------------------
 # INITIAL SETUP
@@ -67,36 +69,54 @@ def get_orders():
     return jsonify({"count": len(mock_orders), "orders": mock_orders})
 
 
-# --- ADD NEW PRODUCT ---
+# --- ADD PRODUCT BY URL ONLY (Auto-Fill Walmart Info) ---
 @app.route("/api/add_product", methods=["POST"])
 def add_product():
-    """Adds a new mock product to data/products.json"""
+    """Add new product using only a Walmart URL."""
     try:
         data = request.get_json()
+        url = data.get("url")
 
-        # Validation
-        if not data or "title" not in data or "url" not in data:
-            return jsonify({"error": "Missing required fields"}), 400
+        if not url:
+            return jsonify({"error": "Missing Walmart URL"}), 400
 
+        # --- Extract Walmart product info ---
+        headers = {"User-Agent": "Mozilla/5.0"}
+        page = requests.get(url, headers=headers)
+        soup = BeautifulSoup(page.text, "html.parser")
+
+        # Title
+        title_tag = soup.find("h1")
+        title = title_tag.text.strip() if title_tag else "Unknown Walmart Product"
+
+        # Image
+        image_tag = soup.find("img")
+        image_url = image_tag["src"] if image_tag and "src" in image_tag.attrs else "https://via.placeholder.com/80"
+
+        # Price
+        price_tag = soup.find("span", {"class": "price-characteristic"})
+        if price_tag and price_tag.get("content"):
+            price = float(price_tag["content"])
+        else:
+            price = round(random.uniform(35, 99), 2)
+
+        # --- Build product entry ---
         products = load_products()
         new_item = {
             "id": f"WM{str(len(products)+1).zfill(3)}",
-            "title": data.get("title"),
-            "url": data.get("url"),
-            "image": data.get("image", "https://via.placeholder.com/80"),
-            "price": float(data.get("price", 0)),
-            "stock": int(data.get("stock", 0)),
-            "status": "Active" if int(data.get("stock", 0)) > 0 else "Out of Stock",
+            "title": title,
+            "url": url,
+            "image": image_url,
+            "price": price,
+            "stock": random.randint(1, 25),
+            "status": "Active",
         }
 
+        # --- Save & return ---
         products.append(new_item)
         save_products(products)
+        return jsonify({"message": "✅ Product added from URL", "product": new_item, "success": True})
 
-        return jsonify({
-            "message": "✅ Product added successfully!",
-            "product": new_item,
-            "success": True
-        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
