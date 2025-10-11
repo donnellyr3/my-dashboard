@@ -1,75 +1,78 @@
 from flask import Flask, request, jsonify
-import cloudscraper
-from bs4 import BeautifulSoup
+import requests
+import os
+import time
 
 app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return jsonify({"message": "Scraper Worker is running"}), 200
+# Get your ScrapeOps API key from Render environment variables
+SCRAPEOPS_KEY = os.environ.get("SCRAPEOPS_KEY")
 
-
-@app.route('/scrape', methods=['POST'])
+@app.route("/scrape", methods=["POST"])
 def scrape():
+    """
+    Scrapes a given product URL using the ScrapeOps proxy API
+    and returns basic info like title and price.
+    """
     data = request.get_json()
-    url = data.get("url")
+    product_url = data.get("url")
 
-    if not url:
-        return jsonify({"success": False, "error": "Missing 'url' in request"}), 400
+    if not product_url:
+        return jsonify({"success": False, "error": "Missing URL"}), 400
 
-    try:
-        # Create a real browser-like scraper
-        scraper = cloudscraper.create_scraper(browser={
-            'browser': 'chrome',
-            'platform': 'windows',
-            'mobile': False
-        })
+    api_url = "https://proxy.scrapeops.io/v1/"
+    params = {
+        "api_key": SCRAPEOPS_KEY,
+        "url": product_url,
+        "country": "us"
+    }
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                          "AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/120.0.0.0 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,"
-                      "image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
-        }
+    # Retry up to 3 times if ScrapeOps fails (proxy timeout, etc.)
+    for attempt in range(3):
+        try:
+            res = requests.get(api_url, params=params, timeout=15)
+            html = res.text.lower()
 
-        response = scraper.get(url, headers=headers)
-        html = response.text
-        soup = BeautifulSoup(html, "html.parser")
+            # Check if blocked or bad status
+            if res.status_code != 200 or "blocked" in html or "captcha" in html:
+                time.sleep(2)  # short delay
+                continue
 
-        # Try to extract the title
-        title = (
-            soup.find("h1", {"class": "prod-ProductTitle"}) or
-            soup.find("h1", {"itemprop": "name"}) or
-            soup.find("title")
-        )
-        title_text = title.text.strip() if title else "N/A"
+            # --- Basic parsing for title and price ---
+            title = "N/A"
+            price = "N/A"
 
-        # Try to extract price
-        price = (
-            soup.find("span", {"class": "price-characteristic"}) or
-            soup.find("span", {"itemprop": "price"}) or
-            soup.find("span", {"data-automation": "buybox-price"})
-        )
-        price_text = price.text.strip() if price else "N/A"
+            if "<title>" in html:
+                title = html.split("<title>")[1].split("</title>")[0][:100]
 
-        # Return results
-        return jsonify({
-            "success": True,
-            "url": url,
-            "title": title_text,
-            "price": price_text
-        }), 200
+            if "$" in html:
+                price = "$" + html.split("$")[1].split("<")[0][:6]
 
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "url": url
-        }), 500
+            return jsonify({
+                "success": True,
+                "title": title.strip(),
+                "price": price.strip(),
+                "url": product_url
+            })
+
+        except Exception as e:
+            error_msg = str(e)
+            time.sleep(2)
+            continue
+
+    # If all retries failed
+    return jsonify({
+        "success": False,
+        "error": f"Failed to scrape after 3 attempts: {error_msg}",
+        "url": product_url
+    }), 500
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+@app.route("/", methods=["GET"])
+def home():
+    return "🕷️ Scraper Worker is Live with ScrapeOps Proxy!"
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
 
