@@ -5,18 +5,18 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# -----------------------------
-# eBay Credentials from Render
-# -----------------------------
+# -----------------------------------
+# Load eBay Credentials from Render
+# -----------------------------------
 EBAY_CLIENT_ID = os.getenv("EBAY_CLIENT_ID")
 EBAY_CLIENT_SECRET = os.getenv("EBAY_CLIENT_SECRET")
 EBAY_REFRESH_TOKEN = os.getenv("EBAY_REFRESH_TOKEN")
 EBAY_ACCESS_TOKEN = os.getenv("EBAY_ACCESS_TOKEN")
 
 
-# -----------------------------
-# ROUTES
-# -----------------------------
+# -----------------------------------
+# Base Routes
+# -----------------------------------
 @app.route('/')
 def home():
     return jsonify({"message": "✅ My eBay Dashboard API is live"}), 200
@@ -24,6 +24,7 @@ def home():
 
 @app.route('/api/ebay/status', methods=['GET'])
 def ebay_status():
+    """Check which credentials are currently loaded"""
     status = {
         "client_id_set": bool(EBAY_CLIENT_ID),
         "client_secret_set": bool(EBAY_CLIENT_SECRET),
@@ -34,8 +35,12 @@ def ebay_status():
     return jsonify(status), 200
 
 
+# -----------------------------------
+# Token Validation
+# -----------------------------------
 @app.route('/api/check_token', methods=['GET'])
 def check_token():
+    """Verify if current eBay Access Token is valid"""
     if not EBAY_ACCESS_TOKEN:
         return jsonify({"success": False, "message": "Access token missing"}), 400
 
@@ -57,15 +62,20 @@ def check_token():
         }), 401
 
 
-@app.route('/api/refresh_token', methods=['POST'])
+# -----------------------------------
+# Refresh Token Endpoint
+# -----------------------------------
+@app.route('/api/refresh_token', methods=['GET', 'POST'])
 def refresh_token():
-    """Refresh eBay access token using the refresh token."""
+    """Refresh the eBay Access Token using the Refresh Token"""
+    if not all([EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, EBAY_REFRESH_TOKEN]):
+        return jsonify({
+            "success": False,
+            "message": "Missing eBay credentials in environment variables"
+        }), 400
+
     url = "https://api.ebay.com/identity/v1/oauth2/token"
-
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
-
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
     data = {
         "grant_type": "refresh_token",
         "refresh_token": EBAY_REFRESH_TOKEN,
@@ -84,9 +94,8 @@ def refresh_token():
             "success": True,
             "message": "Access token refreshed successfully",
             "access_token": new_token,
-            "expires_in": expires_in
+            "expires_in_seconds": expires_in
         }), 200
-
     else:
         return jsonify({
             "success": False,
@@ -96,6 +105,9 @@ def refresh_token():
         }), 400
 
 
+# -----------------------------------
+# Run the App
+# -----------------------------------
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
 
