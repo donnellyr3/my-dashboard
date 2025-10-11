@@ -31,10 +31,10 @@ def home():
     return jsonify({"response": "✅ eBay Dropshipping API Running — Auto Price/Stock Monitor Ready!"})
 
 # --------------------------------------------------
-# 🔄 REFRESH ACCESS TOKEN
+# 🔄 REFRESH ACCESS TOKEN FUNCTION
 # --------------------------------------------------
 def refresh_access_token():
-    """Refresh short-term access token using the refresh token."""
+    """Automatically refresh short-term access token using the refresh token."""
     global EBAY_ACCESS_TOKEN
 
     print("♻️ Refreshing eBay access token...")
@@ -47,15 +47,21 @@ def refresh_access_token():
             "https://api.ebay.com/oauth/api_scope "
             "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly "
             "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly"
-        )
+        ),
     }
 
     try:
-        response = requests.post(url, headers=headers, auth=(EBAY_CLIENT_ID, EBAY_CLIENT_SECRET), data=data)
+        response = requests.post(
+            url,
+            headers=headers,
+            data=data,
+            auth=(EBAY_CLIENT_ID, EBAY_CLIENT_SECRET),
+        )
+
         if response.status_code == 200:
             EBAY_ACCESS_TOKEN = response.json().get("access_token")
             os.environ["EBAY_ACCESS_TOKEN"] = EBAY_ACCESS_TOKEN
-            print("✅ Access token refreshed successfully.")
+            print("✅ Token refreshed successfully.")
             return EBAY_ACCESS_TOKEN
         else:
             print("❌ Token refresh failed:", response.text)
@@ -70,12 +76,12 @@ def refresh_access_token():
 def auto_refresh_loop():
     while True:
         refresh_access_token()
-        time.sleep(7200)
+        time.sleep(7200)  # every 2 hours
 
 threading.Thread(target=auto_refresh_loop, daemon=True).start()
 
 # --------------------------------------------------
-# 📦 GET INVENTORY
+# 📦 GET INVENTORY ENDPOINT
 # --------------------------------------------------
 @app.route("/api/ebay/inventory", methods=["GET"])
 def get_inventory():
@@ -120,7 +126,7 @@ def get_inventory():
     return jsonify(listings)
 
 # --------------------------------------------------
-# 🧾 GET ORDERS
+# 🧾 GET ORDERS ENDPOINT
 # --------------------------------------------------
 @app.route("/api/ebay/orders", methods=["GET"])
 def get_orders():
@@ -160,16 +166,56 @@ def get_orders():
     return jsonify(orders)
 
 # --------------------------------------------------
-# 🔁 MANUAL TOKEN REFRESH
+# 🔁 MANUAL REFRESH ENDPOINT (FIXED VERSION)
 # --------------------------------------------------
-@app.route("/api/ebay/refresh", methods=["POST", "GET"])
+@app.route("/api/ebay/refresh", methods=["GET", "POST"])
 def manual_refresh():
-    """Manually trigger a token refresh."""
-    new_token = refresh_access_token()
-    if new_token:
-        return jsonify({"✅ Token refresh successful": True, "access_token": new_token})
-    else:
-        return jsonify({"❌ Token refresh failed": True}), 500
+    """Manually trigger token refresh via eBay OAuth2 endpoint."""
+    global EBAY_ACCESS_TOKEN
+
+    print("♻️ Manual token refresh requested...")
+
+    url = "https://api.ebay.com/identity/v1/oauth2/token"
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": EBAY_REFRESH_TOKEN,
+        "scope": (
+            "https://api.ebay.com/oauth/api_scope "
+            "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly "
+            "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly"
+        )
+    }
+
+    try:
+        response = requests.post(
+            url,
+            headers=headers,
+            data=data,
+            auth=(EBAY_CLIENT_ID, EBAY_CLIENT_SECRET)
+        )
+
+        if response.status_code == 200:
+            new_token = response.json().get("access_token")
+            EBAY_ACCESS_TOKEN = new_token
+            os.environ["EBAY_ACCESS_TOKEN"] = new_token
+            print("✅ Token refresh successful!")
+            return jsonify({
+                "success": True,
+                "message": "✅ Token refresh successful!",
+                "access_token": new_token
+            })
+        else:
+            print("❌ eBay token refresh failed:", response.text)
+            return jsonify({
+                "success": False,
+                "status": response.status_code,
+                "error": response.text
+            }), response.status_code
+
+    except Exception as e:
+        print("❌ Exception during token refresh:", e)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 # --------------------------------------------------
 # 🌐 STATIC FILES (OPTIONAL)
