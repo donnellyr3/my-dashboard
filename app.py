@@ -12,6 +12,9 @@ import io
 app = Flask(__name__)
 CORS(app)
 
+# ==============================
+# CONFIG & ENVIRONMENT
+# ==============================
 DB_PATH = os.getenv("DB_PATH", "products.db")
 API_KEY = os.getenv("API_KEY", "secret123")
 PRICE_MARKUP_PCT = float(os.getenv("PRICE_MARKUP_PCT", "0.18"))
@@ -23,9 +26,9 @@ EBAY_CLIENT_SECRET = os.getenv("EBAY_CLIENT_SECRET")
 EBAY_REFRESH_TOKEN = os.getenv("EBAY_REFRESH_TOKEN")
 EBAY_ACCESS_TOKEN = os.getenv("EBAY_ACCESS_TOKEN")
 
-# -----------------------------
-# Initialize database
-# -----------------------------
+# ==============================
+# DATABASE SETUP
+# ==============================
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -44,17 +47,15 @@ def init_db():
 
 init_db()
 
-# -----------------------------
-# Utility: Authorization
-# -----------------------------
+# ==============================
+# HELPERS
+# ==============================
 def authorized(req):
     auth_header = req.headers.get("Authorization", "")
     return auth_header == f"Bearer {API_KEY}"
 
-# -----------------------------
-# Utility: Simple Scraper
-# -----------------------------
 def scrape_product(url):
+    """Basic universal product scraper (placeholder)."""
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         page = requests.get(url, headers=headers, timeout=10)
@@ -73,14 +74,13 @@ def scrape_product(url):
     except Exception as e:
         return {"error": str(e), "url": url}
 
-# -----------------------------
-# Routes
-# -----------------------------
+# ==============================
+# ROUTES
+# ==============================
 
 @app.route("/")
 def home():
     return jsonify({"response": "✅ Universal Dropshipping API Running — Auto Product Import Ready!"})
-
 
 @app.route("/api/config")
 def config():
@@ -91,7 +91,7 @@ def config():
         "TREAT_UNKNOWN_STOCK_OOS": TREAT_UNKNOWN_STOCK_OOS
     })
 
-
+# --- ADD SINGLE PRODUCT ---
 @app.route("/api/add_product", methods=["POST"])
 def add_product():
     if not authorized(request):
@@ -108,13 +108,15 @@ def add_product():
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("INSERT INTO products (title, url, price, stock, date_added) VALUES (?, ?, ?, ?, ?)",
-                (product["title"], url, product["price"], product["stock"], datetime.utcnow().isoformat()))
+    cur.execute(
+        "INSERT INTO products (title, url, price, stock, date_added) VALUES (?, ?, ?, ?, ?)",
+        (product["title"], url, product["price"], product["stock"], datetime.utcnow().isoformat())
+    )
     conn.commit()
     conn.close()
     return jsonify({"success": True, "message": "Product added successfully"})
 
-
+# --- BULK ADD ---
 @app.route("/api/bulk_add", methods=["POST"])
 def bulk_add():
     if not authorized(request):
@@ -128,16 +130,18 @@ def bulk_add():
         if "error" not in product:
             conn = sqlite3.connect(DB_PATH)
             cur = conn.cursor()
-            cur.execute("INSERT INTO products (title, url, price, stock, date_added) VALUES (?, ?, ?, ?, ?)",
-                        (product["title"], url, product["price"], product["stock"], datetime.utcnow().isoformat()))
+            cur.execute(
+                "INSERT INTO products (title, url, price, stock, date_added) VALUES (?, ?, ?, ?, ?)",
+                (product["title"], url, product["price"], product["stock"], datetime.utcnow().isoformat())
+            )
             conn.commit()
             conn.close()
         results.append(product)
     return jsonify({"added": results})
 
-
-@app.route("/api/get_listings", methods=["GET"])
-def get_listings():
+# --- FIXED: LISTINGS ---
+@app.route("/api/listings", methods=["GET"])
+def listings():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
     cur.execute("SELECT * FROM products")
@@ -156,7 +160,7 @@ def get_listings():
         })
     return jsonify({"count": len(products), "products": products})
 
-
+# --- DELETE SINGLE PRODUCT ---
 @app.route("/api/delete_product/<int:pid>", methods=["DELETE"])
 def delete_product(pid):
     if not authorized(request):
@@ -168,7 +172,7 @@ def delete_product(pid):
     conn.close()
     return jsonify({"success": True, "message": f"Product {pid} deleted"})
 
-
+# --- BULK DELETE ---
 @app.route("/api/bulk_delete", methods=["POST"])
 def bulk_delete():
     if not authorized(request):
@@ -182,7 +186,7 @@ def bulk_delete():
     conn.close()
     return jsonify({"success": True, "deleted": len(ids)})
 
-
+# --- EXPORT CSV ---
 @app.route("/api/export", methods=["GET"])
 def export_csv():
     conn = sqlite3.connect(DB_PATH)
@@ -195,8 +199,8 @@ def export_csv():
     writer = csv.writer(output)
     writer.writerow(["id", "title", "url", "price", "stock", "date_added"])
     writer.writerows(rows)
-
     output.seek(0)
+
     return send_file(
         io.BytesIO(output.getvalue().encode()),
         mimetype="text/csv",
@@ -204,7 +208,7 @@ def export_csv():
         download_name="products_export.csv"
     )
 
-
+# --- INVENTORY SUMMARY ---
 @app.route("/api/inventory", methods=["GET"])
 def inventory_summary():
     conn = sqlite3.connect(DB_PATH)
@@ -214,7 +218,7 @@ def inventory_summary():
     conn.close()
     return jsonify({"total": total, "out_of_stock": oos})
 
-
+# --- MOCK ORDERS ---
 @app.route("/api/orders", methods=["GET"])
 def mock_orders():
     data = {
@@ -226,18 +230,16 @@ def mock_orders():
     }
     return jsonify(data)
 
-
+# --- REFRESH DATA MOCK ---
 @app.route("/api/refresh_data", methods=["POST"])
 def refresh_data():
     if not authorized(request):
         return jsonify({"error": "Unauthorized"}), 401
     return jsonify({"success": True, "message": "Stock & pricing refreshed"})
 
-
-# -----------------------------
-# eBay token management
-# -----------------------------
-
+# ==============================
+# EBAY AUTH MANAGEMENT
+# ==============================
 @app.route("/api/status", methods=["GET"])
 def ebay_status():
     return jsonify({
@@ -247,7 +249,6 @@ def ebay_status():
         "access_token_set": bool(EBAY_ACCESS_TOKEN),
         "timestamp": datetime.utcnow().isoformat() + "Z"
     })
-
 
 @app.route("/api/check_token", methods=["GET"])
 def ebay_check_token():
@@ -269,7 +270,6 @@ def ebay_check_token():
             })
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
-
 
 @app.route("/api/refresh_token", methods=["GET"])
 def refresh_token():
@@ -301,15 +301,17 @@ def refresh_token():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
-
-# -----------------------------
-# Debug print for route map
-# -----------------------------
-print("🔍 Registered routes:")
+# ==============================
+# DEBUG ROUTE MAP
+# ==============================
+print("\n🔍 Registered routes:")
 for rule in app.url_map.iter_rules():
     print(rule)
+print("✅ Flask app initialized successfully!\n")
 
-
+# ==============================
+# MAIN
+# ==============================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
 
