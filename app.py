@@ -1,4 +1,3 @@
-cat > app.py <<'EOF'
 import os
 import json
 import random
@@ -10,10 +9,8 @@ from threading import Timer
 app = Flask(__name__)
 CORS(app)
 
-# === File path for product data ===
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "products.json")
 
-# === Utility: Load product data ===
 def load_products():
     try:
         with open(DATA_FILE, "r") as f:
@@ -22,7 +19,6 @@ def load_products():
         print(f"⚠️ Could not load products.json: {e}")
         return []
 
-# === Utility: Simulate Walmart price/stock ===
 def simulate_walmart_data(products):
     simulated = []
     for item in products:
@@ -39,7 +35,6 @@ def simulate_walmart_data(products):
         })
     return simulated
 
-# === Root endpoint ===
 @app.route("/")
 def home():
     return jsonify({
@@ -47,14 +42,12 @@ def home():
         "endpoints": ["/api/inventory", "/api/orders", "/api/sync"]
     })
 
-# === Inventory endpoint ===
 @app.route("/api/inventory", methods=["GET"])
 def get_inventory():
     products = load_products()
     data = simulate_walmart_data(products)
     return jsonify({"count": len(data), "products": data})
 
-# === Orders endpoint (mock data) ===
 @app.route("/api/orders", methods=["GET"])
 def get_orders():
     mock_orders = [
@@ -64,7 +57,6 @@ def get_orders():
     ]
     return jsonify({"count": len(mock_orders), "orders": mock_orders})
 
-# === Sync endpoint ===
 @app.route("/api/sync", methods=["POST"])
 def sync_prices():
     products = load_products()
@@ -81,20 +73,17 @@ def sync_prices():
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
     })
 
-# === Auto-refresh loop ===
 def auto_sync_loop():
     try:
         print("🔄 Auto-sync triggered (mock mode)...")
         load_products()
     except Exception as e:
         print("Auto-sync error:", e)
-    Timer(5400, auto_sync_loop).start()  # every 90 minutes
+    Timer(5400, auto_sync_loop).start()
 
 Timer(10, auto_sync_loop).start()
 
-# === Run app ===
 if __name__ == "__main__":
     print("✅ Walmart Dropshipping Mock API Running — Ready for Appsmith connection")
     app.run(host="0.0.0.0", port=5000)
-EOF
 
