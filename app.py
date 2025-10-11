@@ -1,89 +1,101 @@
 import os
 import json
 import random
-import time
-from flask import Flask, jsonify, request
+from datetime import datetime
+from flask import Flask, jsonify
 from flask_cors import CORS
 from threading import Timer
 
+# ============================================================
+# Flask Setup
+# ============================================================
 app = Flask(__name__)
 CORS(app)
 
-DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "products.json")
+DATA_PATH = "data/products.json"
 
-def load_products():
-    try:
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"⚠️ Could not load products.json: {e}")
-        return []
-
-def simulate_walmart_data(products):
-    simulated = []
-    for item in products:
-        price = round(random.uniform(35.0, 99.0), 2)
-        stock = random.randint(0, 30)
-        simulated.append({
-            "id": item.get("id"),
-            "title": item.get("title", f"Mock Product {item.get('id', '')}"),
-            "url": item.get("url"),
-            "price": price,
-            "stock": stock,
-            "status": "Active" if stock > 0 else "Out of Stock",
-            "image": item.get("image", "https://via.placeholder.com/80")
-        })
-    return simulated
-
+# ============================================================
+# Root endpoint (for testing Render connection)
+# ============================================================
 @app.route("/")
 def home():
     return jsonify({
-        "message": "✅ Walmart Dropshipping Mock API Running — AutoDS Clone Ready",
-        "endpoints": ["/api/inventory", "/api/orders", "/api/sync"]
+        "response": "✅ eBay Dropshipping API Running — Auto Price/Stock Monitor Ready!"
     })
 
+# ============================================================
+# Inventory endpoint (mock Walmart data)
+# ============================================================
 @app.route("/api/inventory", methods=["GET"])
 def get_inventory():
-    products = load_products()
-    data = simulate_walmart_data(products)
-    return jsonify({"count": len(data), "products": data})
+    try:
+        with open(DATA_PATH, "r") as f:
+            products = json.load(f)
+    except Exception as e:
+        return jsonify({"error": f"Could not load products.json: {str(e)}"}), 500
 
+    return jsonify({
+        "count": len(products),
+        "products": products
+    })
+
+# ============================================================
+# Orders endpoint (mock eBay-style order list)
+# ============================================================
 @app.route("/api/orders", methods=["GET"])
 def get_orders():
     mock_orders = [
-        {"order_id": "ORD001", "buyer": "John Doe", "total": 79.99, "date": "2025-10-09"},
-        {"order_id": "ORD002", "buyer": "Sara K.", "total": 45.50, "date": "2025-10-10"},
-        {"order_id": "ORD003", "buyer": "Liam R.", "total": 65.00, "date": "2025-10-11"},
+        {"order_id": "ORD001", "buyer": "John Doe", "date": "2025-10-09", "total": 79.99},
+        {"order_id": "ORD002", "buyer": "Sara K.", "date": "2025-10-10", "total": 45.50},
+        {"order_id": "ORD003", "buyer": "Liam R.", "date": "2025-10-11", "total": 65.00},
     ]
     return jsonify({"count": len(mock_orders), "orders": mock_orders})
 
-@app.route("/api/sync", methods=["POST"])
-def sync_prices():
-    products = load_products()
-    updated_data = simulate_walmart_data(products)
+# ============================================================
+# Sync endpoint (mock Walmart "Refresh" automation)
+# ============================================================
+@app.route("/api/sync", methods=["GET", "POST"])
+def sync_products():
+    """Simulates auto price/stock sync like AutoDS"""
     try:
-        with open(DATA_FILE, "w") as f:
-            json.dump(updated_data, f, indent=2)
+        with open(DATA_PATH, "r") as f:
+            products = json.load(f)
     except Exception as e:
-        print("⚠️ Could not write to products.json:", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+    # Update prices & stock randomly
+    for p in products:
+        p["price"] = round(random.uniform(35, 100), 2)
+        p["stock"] = random.randint(0, 30)
+        p["status"] = "Active" if p["stock"] > 0 else "Out of Stock"
+
+    # Save changes
+    with open(DATA_PATH, "w") as f:
+        json.dump(products, f, indent=2)
 
     return jsonify({
         "success": True,
-        "message": f"✅ Sync completed — {len(updated_data)} products updated (mock mode)",
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        "message": f"✅ Sync completed — {len(products)} products updated (mock mode)",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     })
 
-def auto_sync_loop():
+# ============================================================
+# Auto-refresh (every 90 minutes)
+# ============================================================
+def auto_refresh():
     try:
-        print("🔄 Auto-sync triggered (mock mode)...")
-        load_products()
+        print("🔄 Auto-refresh triggered (mock sync running...)")
+        sync_products()
     except Exception as e:
-        print("Auto-sync error:", e)
-    Timer(5400, auto_sync_loop).start()
+        print("Auto-refresh error:", e)
+    Timer(5400, auto_refresh).start()  # 5400 sec = 90 min
 
-Timer(10, auto_sync_loop).start()
+Timer(10, auto_refresh).start()
 
+# ============================================================
+# Run Flask app
+# ============================================================
 if __name__ == "__main__":
-    print("✅ Walmart Dropshipping Mock API Running — Ready for Appsmith connection")
+    print("✅ Flask API started — Walmart mock automation ready!")
     app.run(host="0.0.0.0", port=5000)
 
