@@ -4,8 +4,12 @@ import requests, time, os
 
 app = Flask(__name__)
 
+# 🔑 ScrapeOps API Key (use the one in Render’s Environment Variables)
 SCRAPEOPS_API_KEY = os.getenv("SCRAPEOPS_API_KEY", "demo-key")
 
+# ---------------------------
+# 🧠 SCRAPER ROUTE
+# ---------------------------
 @app.route("/scrape", methods=["POST"])
 def scrape():
     data = request.get_json(force=True)
@@ -25,7 +29,6 @@ def scrape():
 
     for attempt in range(3):
         try:
-            # Random realistic browser headers
             h_res = requests.get(headers_url, params={"api_key": SCRAPEOPS_API_KEY, "num_results": "1"})
             browser_headers = h_res.json().get("result", [{}])[0]
 
@@ -58,6 +61,9 @@ def scrape():
     }), 500
 
 
+# ---------------------------
+# 📦 INVENTORY ROUTE
+# ---------------------------
 @app.route("/inventory", methods=["GET"])
 def get_inventory():
     return jsonify([
@@ -66,12 +72,17 @@ def get_inventory():
     ])
 
 
+# ---------------------------
+# 🏠 HOME ROUTE
+# ---------------------------
 @app.route("/", methods=["GET"])
 def home():
     return "✅ Flask backend is LIVE on Render"
 
 
-# ---- only ONE run command ----
+# ---------------------------
+# 🚀 RUN APP
+# ---------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
 
