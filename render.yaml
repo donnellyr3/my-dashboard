@@ -1,20 +1,19 @@
 services:
   - type: web
-    name: my-dashboard-tqtg
+    name: my-dashboard
     env: python
-    region: oregon  # or choose closer region
     plan: free
-    branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
-
     envVars:
-      - key: EBAY_ACCESS_TOKEN
-        value: v^1.1#i^1#f^0#I^3#r^0#p^3#t^H4sIAAAAAAAA/...
-      - key: EBAY_REFRESH_TOKEN
-        value: v^1.1#i^1#p^3#I^3#f^0#r^1#t^Ul4xMF85OjdFNjQ5...
-      - key: EBAY_CLIENT_SECRET
-        value: PRD-c5bc8295a47b-5ecb-442d-ab56-1718
+      - key: API_KEY
+        value: secret123
+      - key: DB_PATH
+        value: products.db
+      - key: PRICE_MARKUP_PCT
+        value: "0.18"
+      - key: PRICE_FLAT_FEE
+        value: "3.0"
+      - key: TREAT_UNKNOWN_STOCK_OOS
+        value: "0"
 
-
-    autoDeploy: true
