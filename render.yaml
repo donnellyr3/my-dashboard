@@ -1,13 +1,17 @@
-services:
+kservices:
   - type: web
     name: my-dashboard
     env: python
-    plan: free
     region: oregon
+    plan: free
+    branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: python3 app.py
-    envVars:
-      - key: SCRAPEOPS_API_KEY
-        value: demo-key
+    startCommand: gunicorn -b 0.0.0.0:$PORT app:app --workers=1 --threads=4 --timeout=120 --log-level=info
+    healthCheckPath: /healthz
     autoDeploy: true
+    envVars:
+      - key: WEB_CONCURRENCY
+        value: "1"
+      - key: PYTHONUNBUFFERED
+        value: "1"
 
