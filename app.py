@@ -29,12 +29,15 @@ def scrape():
 
     for attempt in range(3):
         try:
+            # Get random realistic headers
             h_res = requests.get(headers_url, params={"api_key": SCRAPEOPS_API_KEY, "num_results": "1"})
             browser_headers = h_res.json().get("result", [{}])[0]
 
+            # Fetch page via ScrapeOps proxy
             resp = requests.get(proxy_url, params=proxy_params, headers=browser_headers, timeout=30)
             html = resp.text
 
+            # Parse HTML
             soup = BeautifulSoup(html, "html.parser")
             title = soup.find("h1")
             price = (
@@ -81,7 +84,7 @@ def home():
 
 
 # ---------------------------
-# 🚀 RUN APP
+# 🚀 RUN APP (Render expects this)
 # ---------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
