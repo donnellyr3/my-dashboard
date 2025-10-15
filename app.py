@@ -1,70 +1,88 @@
-from flask import Flask, request, jsonify
+kfrom flask import Flask, request, jsonify
 import requests
+from bs4 import BeautifulSoup
 import os
-import time
 
 app = Flask(__name__)
 
-SCRAPEOPS_KEY = os.environ.get("SCRAPEOPS_KEY")
+# Get ScrapeOps API key from Render environment variables
+SCRAPEOPS_API_KEY = os.getenv("SCRAPEOPS_API_KEY")
 
-@app.route("/scrape", methods=["POST"])
+@app.route('/')
+def home():
+    return jsonify({"message": "✅ Scraper Worker is running!"})
+
+@app.route('/test')
+def test():
+    """Quick test to verify ScrapeOps proxy connection"""
+    try:
+        test_url = "https://httpbin.org/ip"
+        proxy_url = "https://proxy.scrapeops.io/v1/"
+        proxy_params = {
+            'api_key': SCRAPEOPS_API_KEY,
+            'url': test_url
+        }
+        resp = requests.get(proxy_url, params=proxy_params, timeout=20)
+        return jsonify({
+            "success": True,
+            "proxy_ip": resp.json(),
+            "note": "✅ ScrapeOps proxy is working correctly!"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route('/scrape', methods=['POST'])
 def scrape():
     data = request.get_json()
-    product_url = data.get("url")
+    url = data.get('url')
 
-    if not product_url:
+    if not url:
         return jsonify({"success": False, "error": "Missing URL"}), 400
 
-    proxy_url = "https://proxy.scrapeops.io/v1/"
-    headers_url = "https://headers.scrapeops.io/v1/browser-headers"
-    params = {"api_key": SCRAPEOPS_KEY, "url": product_url, "country": "us"}
+    try:
+        # Step 1: Get realistic browser headers from ScrapeOps
+        headers_resp = requests.get(
+            'https://headers.scrapeops.io/v1/browser-headers',
+            params={'api_key': SCRAPEOPS_API_KEY, 'num_results': '1'}
+        )
+        headers_resp.raise_for_status()
+        browser_headers = headers_resp.json()['result'][0]
 
-    # Retry 3 times with random browser headers
-    for attempt in range(3):
-        try:
-            # ✅ get random real browser headers
-            h_res = requests.get(headers_url, params={"api_key": SCRAPEOPS_KEY, "num_results": "1"})
-            headers = h_res.json()["result"][0]
+        # Step 2: Add realistic browsing metadata
+        browser_headers['Referer'] = "https://www.google.com/"
+        browser_headers['Accept-Language'] = "en-US,en;q=0.9"
+        browser_headers['Accept-Encoding'] = "gzip, deflate, br"
+        browser_headers['Accept'] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
 
-            res = requests.get(proxy_url, params=params, headers=headers, timeout=20)
-            html = res.text.lower()
+        # Step 3: Use ScrapeOps Proxy to avoid blocks
+        proxy_url = "https://proxy.scrapeops.io/v1/"
+        proxy_params = {
+            'api_key': SCRAPEOPS_API_KEY,
+            'url': url
+        }
 
-            if res.status_code != 200 or "robot" in html or "captcha" in html:
-                time.sleep(2)
-                continue
+        resp = requests.get(proxy_url, params=proxy_params, headers=browser_headers, timeout=30)
+        html = resp.text
 
-            title = "N/A"
-            price = "N/A"
+        # Step 4: Parse title and price
+        soup = BeautifulSoup(html, 'html.parser')
+        title = soup.find('h1')
+        price = (
+            soup.find('span', {'class': 'price-characteristic'}) or
+            soup.find('span', {'class': 'w_iUH7'}) or
+            soup.find('span', {'class': 'price'})
+        )
 
-            if "<title>" in html:
-                title = html.split("<title>")[1].split("</title>")[0][:100]
+        return jsonify({
+            "success": True,
+            "url": url,
+            "title": title.text.strip() if title else "N/A",
+            "price": price.text.strip() if price else "N/A"
+        })
 
-            if "$" in html:
-                price = "$" + html.split("$")[1].split("<")[0][:6]
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
-            return jsonify({
-                "success": True,
-                "title": title.strip(),
-                "price": price.strip(),
-                "url": product_url
-            })
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
 
-        except Exception as e:
-            error_msg = str(e)
-            time.sleep(2)
-            continue
-
-    return jsonify({
-        "success": False,
-        "error": f"Failed after 3 attempts: {error_msg}",
-        "url": product_url
-    }), 500
-
-
-@app.route("/", methods=["GET"])
-def home():
-    return "✅ Scraper Worker Live with Browser Headers"
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
