@@ -2,13 +2,9 @@ services:
   - type: web
     name: my-dashboard
     env: python
-    region: oregon
     plan: free
-    branch: main
+    region: oregon
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
-    envVars:
-      - key: SCRAPEOPS_API_KEY
-        value: demo-key
+    startCommand: python3 app.py
     autoDeploy: true
 
