@@ -1,53 +1,48 @@
 from flask import Flask, request, jsonify
-import os
+from bs4 import BeautifulSoup
 import requests
 import time
-from bs4 import BeautifulSoup
+import os
 
 app = Flask(__name__)
 
-# 🔑 Environment variable for ScrapeOps API key
-SCRAPEOPS_API_KEY = os.environ.get("SCRAPEOPS_KEY")
+# 🔑 ScrapeOps API Key (make sure you’ve added this to Render’s Environment Variables)
+SCRAPEOPS_API_KEY = os.environ.get("SCRAPEOPS_API_KEY", "demo-key")
 
 # ---------------------------
-# 🕷️ SCRAPE ROUTE
+# 🧠 SCRAPER ROUTE
 # ---------------------------
 @app.route("/scrape", methods=["POST"])
 def scrape():
-    """
-    Scrapes a given product URL using ScrapeOps proxy and browser headers.
-    Returns title and price.
-    """
     data = request.get_json()
-    url = data.get("url")
+    product_url = data.get("url")
 
-    if not url:
+    if not product_url:
         return jsonify({"success": False, "error": "Missing URL"}), 400
 
     proxy_url = "https://proxy.scrapeops.io/v1/"
     headers_url = "https://headers.scrapeops.io/v1/browser-headers"
 
-    # Try up to 3 times with random browser headers
+    proxy_params = {
+        "api_key": SCRAPEOPS_API_KEY,
+        "url": product_url,
+        "country": "us"
+    }
+
+    # Try up to 3 times with randomized headers
     for attempt in range(3):
         try:
-            # Step 1: Get random realistic browser headers
-            headers_resp = requests.get(
-                headers_url,
-                params={"api_key": SCRAPEOPS_API_KEY, "num_results": "1"}
-            )
-            headers_resp.raise_for_status()
-            browser_headers = headers_resp.json()["result"][0]
+            # Step 1: Get random browser headers
+            h_res = requests.get(headers_url, params={"api_key": SCRAPEOPS_API_KEY, "num_results": "1"})
+            browser_headers = h_res.json().get("result", [{}])[0]
 
-            # Step 2: Add browsing metadata
-            browser_headers.update({
-                "Referer": "https://www.google.com/",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate, br",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-            })
+            # Step 2: Add realistic browsing metadata
+            browser_headers["Referer"] = "https://www.google.com/"
+            browser_headers["Accept-Language"] = "en-US,en;q=0.9"
+            browser_headers["Accept-Encoding"] = "gzip, deflate, br"
+            browser_headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
 
-            # Step 3: Scrape via ScrapeOps Proxy
-            proxy_params = {"api_key": SCRAPEOPS_API_KEY, "url": url, "country": "us"}
+            # Step 3: Fetch the product page via ScrapeOps proxy
             resp = requests.get(proxy_url, params=proxy_params, headers=browser_headers, timeout=30)
             html = resp.text
 
@@ -62,7 +57,7 @@ def scrape():
 
             return jsonify({
                 "success": True,
-                "url": url,
+                "url": product_url,
                 "title": title.text.strip() if title else "N/A",
                 "price": price.text.strip() if price else "N/A"
             })
@@ -76,7 +71,7 @@ def scrape():
     return jsonify({
         "success": False,
         "error": f"Failed after 3 attempts: {error_msg}",
-        "url": url
+        "url": product_url
     }), 500
 
 
@@ -104,8 +99,9 @@ def home():
 
 
 # ---------------------------
-# 🚀 RUN APP (only once)
+# 🚀 RUN APP (Render expects this)
 # ---------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
