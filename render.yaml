@@ -2,18 +2,10 @@ services:
   - type: web
     name: my-dashboard
     env: python
+    region: oregon
     plan: free
+    branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
-    envVars:
-      - key: API_KEY
-        value: secret123
-      - key: DB_PATH
-        value: products.db
-      - key: PRICE_MARKUP_PCT
-        value: "0.18"
-      - key: PRICE_FLAT_FEE
-        value: "3.0"
-      - key: TREAT_UNKNOWN_STOCK_OOS
-        value: "0"
+    autoDeploy: true
 
