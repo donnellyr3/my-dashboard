@@ -2,10 +2,10 @@ from flask import Flask, jsonify
 import os
 import time
 
-app = Flask(__name__)
+# --- Small startup delay (helps Render detect readiness) ---
+time.sleep(2)
 
-# --- Optional: small delay to help Render detect readiness ---
-time.sleep(1)
+app = Flask(__name__)
 
 # --- Health Check Routes ---
 @app.get("/healthz")
@@ -31,6 +31,16 @@ def inventory():
         {"id": 3, "title": "Demo Item 3", "price": 19.99, "stock": "In Stock"}
     ]
     return jsonify(mock_data)
+
+# --- Root Info Route (Optional Diagnostic) ---
+@app.get("/info")
+def info():
+    """Show environment info for debugging (safe)."""
+    return jsonify({
+        "environment": os.getenv("RENDER", "local"),
+        "python_version": os.sys.version,
+        "status": "running"
+    })
 
 # --- Entry Point ---
 if __name__ == "__main__":
