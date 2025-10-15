@@ -20,5 +20,7 @@ def healthz():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
+    print(f"🚀 Launching Flask app on port {port}", flush=True)
+    time.sleep(1)  # short buffer for Render startup
     app.run(host="0.0.0.0", port=port)
 
