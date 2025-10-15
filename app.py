@@ -1,88 +1,104 @@
 kfrom flask import Flask, request, jsonify
-import requests
-from bs4 import BeautifulSoup
 import os
+import requests
+import time
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# Get ScrapeOps API key from Render environment variables
-SCRAPEOPS_API_KEY = os.getenv("SCRAPEOPS_API_KEY")
+# 🔑 Get your ScrapeOps API key from Render environment variables
+SCRAPEOPS_KEY = os.environ.get("SCRAPEOPS_KEY")
 
-@app.route('/')
-def home():
-    return jsonify({"message": "✅ Scraper Worker is running!"})
-
-@app.route('/test')
-def test():
-    """Quick test to verify ScrapeOps proxy connection"""
-    try:
-        test_url = "https://httpbin.org/ip"
-        proxy_url = "https://proxy.scrapeops.io/v1/"
-        proxy_params = {
-            'api_key': SCRAPEOPS_API_KEY,
-            'url': test_url
-        }
-        resp = requests.get(proxy_url, params=proxy_params, timeout=20)
-        return jsonify({
-            "success": True,
-            "proxy_ip": resp.json(),
-            "note": "✅ ScrapeOps proxy is working correctly!"
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
-
-@app.route('/scrape', methods=['POST'])
+# ---------------------------
+# 🕷️ SCRAPE ROUTE
+# ---------------------------
+@app.route("/scrape", methods=["POST"])
 def scrape():
+    """
+    Scrapes a given product URL using the ScrapeOps proxy API
+    and returns basic info like title and price.
+    """
     data = request.get_json()
-    url = data.get('url')
+    product_url = data.get("url")
 
-    if not url:
+    if not product_url:
         return jsonify({"success": False, "error": "Missing URL"}), 400
 
-    try:
-        # Step 1: Get realistic browser headers from ScrapeOps
-        headers_resp = requests.get(
-            'https://headers.scrapeops.io/v1/browser-headers',
-            params={'api_key': SCRAPEOPS_API_KEY, 'num_results': '1'}
-        )
-        headers_resp.raise_for_status()
-        browser_headers = headers_resp.json()['result'][0]
+    proxy_url = "https://proxy.scrapeops.io/v1/"
+    headers_url = "https://headers.scrapeops.io/v1/browser-headers"
+    proxy_params = {
+        "api_key": SCRAPEOPS_KEY,
+        "url": product_url,
+        "country": "us"
+    }
 
-        # Step 2: Add realistic browsing metadata
-        browser_headers['Referer'] = "https://www.google.com/"
-        browser_headers['Accept-Language'] = "en-US,en;q=0.9"
-        browser_headers['Accept-Encoding'] = "gzip, deflate, br"
-        browser_headers['Accept'] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+    # Try up to 3 times with randomized headers
+    for attempt in range(3):
+        try:
+            # Get random browser headers
+            h_res = requests.get(headers_url, params={"api_key": SCRAPEOPS_KEY, "num_results": "1"})
+            browser_headers = h_res.json().get("result", [{}])[0]
 
-        # Step 3: Use ScrapeOps Proxy to avoid blocks
-        proxy_url = "https://proxy.scrapeops.io/v1/"
-        proxy_params = {
-            'api_key': SCRAPEOPS_API_KEY,
-            'url': url
-        }
+            # Fetch the page
+            resp = requests.get(proxy_url, params=proxy_params, headers=browser_headers, timeout=30)
+            html = resp.text
 
-        resp = requests.get(proxy_url, params=proxy_params, headers=browser_headers, timeout=30)
-        html = resp.text
+            # Parse title and price
+            soup = BeautifulSoup(html, "html.parser")
+            title = soup.find("h1")
+            price = (
+                soup.find("span", {"class": "price-characteristic"}) or
+                soup.find("span", {"class": "w_iUH7"}) or
+                soup.find("span", {"class": "price"})
+            )
 
-        # Step 4: Parse title and price
-        soup = BeautifulSoup(html, 'html.parser')
-        title = soup.find('h1')
-        price = (
-            soup.find('span', {'class': 'price-characteristic'}) or
-            soup.find('span', {'class': 'w_iUH7'}) or
-            soup.find('span', {'class': 'price'})
-        )
+            # Return parsed info
+            return jsonify({
+                "success": True,
+                "url": product_url,
+                "title": title.text.strip() if title else "N/A",
+                "price": price.text.strip() if price else "N/A"
+            })
 
-        return jsonify({
-            "success": True,
-            "url": url,
-            "title": title.text.strip() if title else "N/A",
-            "price": price.text.strip() if price else "N/A"
-        })
+        except Exception as e:
+            error_msg = str(e)
+            time.sleep(2)
+            continue
 
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+    # If all retries failed
+    return jsonify({
+        "success": False,
+        "error": f"Failed after 3 attempts: {error_msg}",
+        "url": product_url
+    }), 500
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+
+# ---------------------------
+# 📦 INVENTORY ROUTE (temporary mock data)
+# ---------------------------
+@app.route("/inventory", methods=["GET"])
+def get_inventory():
+    """
+    Returns mock inventory data for testing until live sync is connected.
+    """
+    data = [
+        {"title": "Demo Item 1", "price": 12.99, "stock": "In Stock", "id": 1},
+        {"title": "Demo Item 2", "price": 7.50, "stock": "Out of Stock", "id": 2}
+    ]
+    return jsonify(data)
+
+
+# ---------------------------
+# 🏠 HOME ROUTE
+# ---------------------------
+@app.route("/", methods=["GET"])
+def home():
+    return "✅ Scraper Worker Live with Browser Headers"
+
+
+# ---------------------------
+# 🚀 RUN APP (only once)
+# ---------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
 
