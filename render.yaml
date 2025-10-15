@@ -1,17 +1,12 @@
-kservices:
+services:
   - type: web
     name: my-dashboard
     env: python
-    region: oregon
-    plan: free
-    branch: main
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn -b 0.0.0.0:$PORT app:app --workers=1 --threads=4 --timeout=120 --log-level=info
+    startCommand: python3 app.py
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
-      - key: WEB_CONCURRENCY
-        value: "1"
       - key: PYTHONUNBUFFERED
         value: "1"
 

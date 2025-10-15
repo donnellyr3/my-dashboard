@@ -1,49 +1,48 @@
 from flask import Flask, jsonify
-import os
-import time
-
-# --- Small startup delay (helps Render detect readiness) ---
-time.sleep(2)
+import os, sys, time, socket
 
 app = Flask(__name__)
 
-# --- Health Check Routes ---
-@app.get("/healthz")
-def healthz():
-    """Render health check route."""
-    return jsonify(status="ok")
-
-@app.get("/")
+# --- Basic routes ---
+@app.route("/")
 def home():
-    """Base route confirming backend is live."""
-    return jsonify(status="ok", message="✅ Flask on Render (gunicorn) is live")
-
-# --- Inventory Route (Mock Data) ---
-@app.get("/inventory")
-def inventory():
-    """
-    Returns mock inventory data for frontend testing.
-    Later this will connect to eBay or ScrapeOps.
-    """
-    mock_data = [
-        {"id": 1, "title": "Demo Item 1", "price": 12.99, "stock": "In Stock"},
-        {"id": 2, "title": "Demo Item 2", "price": 7.50, "stock": "Out of Stock"},
-        {"id": 3, "title": "Demo Item 3", "price": 19.99, "stock": "In Stock"}
-    ]
-    return jsonify(mock_data)
-
-# --- Root Info Route (Optional Diagnostic) ---
-@app.get("/info")
-def info():
-    """Show environment info for debugging (safe)."""
     return jsonify({
-        "environment": os.getenv("RENDER", "local"),
-        "python_version": os.sys.version,
-        "status": "running"
+        "status": "ok",
+        "message": "🚀 11/10 Render-proof Flask app running perfectly"
     })
 
-# --- Entry Point ---
+@app.route("/healthz")
+@app.route("/render-ready")
+def healthz():
+    return jsonify({"status": "ok", "uptime": time.time()})
+
+@app.route("/inventory")
+def inventory():
+    return jsonify([
+        {"id": 1, "name": "Render-Proof Keyboard", "price": 25.99, "stock": "In Stock"},
+        {"id": 2, "name": "Indestructible Mouse", "price": 14.50, "stock": "In Stock"}
+    ])
+
+def wait_for_port(port, retries=5):
+    """Wait until the port is free (Render startup timing fix)."""
+    for attempt in range(retries):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("0.0.0.0", port))
+            print(f"✅ Port {port} is ready (attempt {attempt+1})", flush=True)
+            return True
+        except OSError:
+            print(f"⏳ Waiting for port {port}... (attempt {attempt+1})", flush=True)
+            time.sleep(1)
+    print(f"⚠️ Port {port} may already be in use, continuing anyway.", flush=True)
+    return False
+
+# --- Main entry ---
 if __name__ == "__main__":
-    # This block only runs locally, not on Render
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    print("🧠 Booting 11/10 Flask build...", flush=True)
+    time.sleep(1)
+    wait_for_port(port)
+    print(f"🚀 Launching Flask on port {port}", flush=True)
+    app.run(host="0.0.0.0", port=port)
 
